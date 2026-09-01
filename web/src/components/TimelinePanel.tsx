@@ -28,8 +28,44 @@
  * the server emits a single canvas-state update.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useInView } from '@/hooks/useInView'
 import { VIEWER_URL } from '@/lib/socket'
 import type { Workflow, VideoResultNode } from '@/types/canvas'
+
+// This panel stays mounted (just CSS-hidden) behind the Canvas tab, and the
+// reel/available grids render a card per clip with no virtualization. Left
+// as plain `<video preload="metadata">` per card, a large project put
+// dozens of concurrent NETWORK_LOADING video elements on the page even
+// while the Timeline tab was never opened. useInView defers mounting each
+// card's <video> until it's actually near the (visible) viewport — which
+// also naturally means nothing loads at all while this panel is hidden,
+// since a `display:none` ancestor never reports an intersection.
+function CardThumbnail({
+  url,
+  className,
+  onError,
+}: {
+  url: string
+  className: string
+  onError: (e: React.SyntheticEvent<HTMLVideoElement>) => void
+}): JSX.Element {
+  const [ref, inView] = useInView<HTMLDivElement>()
+  return (
+    <div ref={ref} className="h-full w-full">
+      {inView ? (
+        <video
+          src={url}
+          preload="metadata"
+          muted
+          playsInline
+          draggable={false}
+          className={className}
+          onError={onError}
+        />
+      ) : null}
+    </div>
+  )
+}
 
 interface TimelinePanelProps {
   projectId: string | null
@@ -1008,12 +1044,8 @@ function ReelCard({
           }}
         >
           {url !== '' ? (
-            <video
-              src={url}
-              preload="metadata"
-              muted
-              playsInline
-              draggable={false}
+            <CardThumbnail
+              url={url}
               className="h-full w-full object-cover"
               onError={(e) => {
                 ;(e.currentTarget as HTMLVideoElement).style.display = 'none'
@@ -1105,12 +1137,8 @@ function CompactCard({
           }}
         >
           {url !== '' ? (
-            <video
-              src={url}
-              preload="metadata"
-              muted
-              playsInline
-              draggable={false}
+            <CardThumbnail
+              url={url}
               className="h-full w-full object-cover"
               onError={(e) => {
                 ;(e.currentTarget as HTMLVideoElement).style.display = 'none'

@@ -9,6 +9,7 @@
  */
 import { memo, useState } from 'react'
 import { useMediaExpand } from '@/contexts/MediaExpandContext'
+import { useInView } from '@/hooks/useInView'
 import type { AssetItem } from './useAssets'
 
 /** Custom MIME for asset-rail → canvas drag. Avoids colliding with
@@ -50,6 +51,28 @@ function GlyphForKind({ kind }: { kind: AssetItem['kind'] }): JSX.Element {
   )
 }
 
+function VideoThumbnail({ url }: { url: string }): JSX.Element {
+  const [ref, inView] = useInView<HTMLDivElement>()
+  return (
+    <div
+      ref={ref}
+      data-drag-image="true"
+      className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-neutral-900"
+    >
+      {inView ? (
+        <video
+          src={`${url}#t=0.1`}
+          muted
+          playsInline
+          preload="metadata"
+          className="h-full w-full object-cover"
+          aria-hidden
+        />
+      ) : null}
+    </div>
+  )
+}
+
 function ThumbnailBox({ item }: { item: AssetItem }): JSX.Element {
   // Image — render the photo as-is (no grayscale even when archived;
   // the Restore button + dimmed metadata text are already enough
@@ -69,19 +92,14 @@ function ThumbnailBox({ item }: { item: AssetItem }): JSX.Element {
   // Video — `<video preload="metadata">` shows the first frame as a
   // poster, mimicking a real thumbnail. `#t=0.1` nudges the seek
   // position so we get a slightly more interesting frame than the
-  // literal frame 0 (often black).
+  // literal frame 0 (often black). Unlike the `<img loading="lazy">`
+  // above, `<video>` has no native lazy-load — with dozens of rows this
+  // panel used to mount a live decoder + metadata fetch for every video
+  // at once (confirmed: a 90-video project put 90 concurrent NETWORK_LOADING
+  // video elements on the page on open). useInView defers mounting the
+  // element until the row scrolls near the viewport.
   if (item.kind === 'videos' && item.video_url !== null) {
-    return (
-      <video
-        src={`${item.video_url}#t=0.1`}
-        muted
-        playsInline
-        preload="metadata"
-        data-drag-image="true"
-        className="h-14 w-14 shrink-0 rounded-md bg-neutral-900 object-cover"
-        aria-hidden
-      />
-    )
+    return <VideoThumbnail url={item.video_url} />
   }
   // Audio / Notes — kind-specific glyph fallback.
   return (

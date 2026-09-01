@@ -88,12 +88,19 @@ export function Home() {
 
   const createProject = async () => {
     if (creating) return
+    // Optional up-front name — if given, the server slugifies it into the
+    // project's folder id (e.g. "Ep 8 — The Observer" -> ep-8-the-observer)
+    // instead of the random project_xxxxxx id. Cancel/blank keeps the old
+    // flow: random id, first chat message becomes the title later.
+    const name = window.prompt(
+      'Name this project? (optional — used for the folder name; you can still rename it later)',
+    )
     setCreating(true)
     try {
       const res = await fetch(`${VIEWER_URL}/projects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify(name?.trim() ? { title: name.trim() } : {}),
       })
       if (!res.ok) throw new Error(`viewer ${res.status}`)
       const created = (await res.json()) as ProjectRow
@@ -202,7 +209,7 @@ export function Home() {
               New project
             </div>
             <div className="mt-2 max-w-[200px] text-xs text-muted-foreground">
-              Start a blank conversation. First message becomes the title.
+              Name it now for a readable folder, or skip and rename later.
             </div>
           </button>
 
@@ -247,6 +254,27 @@ function ProjectCard({
 }): JSX.Element {
   const [draft, setDraft] = useState(project.title)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+
+  // Only decode/play the cover video while its card is actually on screen —
+  // with dozens of project cards, autoplaying every video at once is what
+  // was spiking Safari's memory and freezing the tab.
+  useEffect(() => {
+    const el = videoRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          el.play().catch(() => {})
+        } else {
+          el.pause()
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     if (editing) {
@@ -300,10 +328,12 @@ function ProjectCard({
       </button>
       {project.cover_url ? (
         <video
+          ref={videoRef}
           src={project.cover_url}
           muted
           loop
-          autoPlay
+          playsInline
+          preload="none"
           className="min-h-0 w-full flex-1 object-cover"
         />
       ) : (
